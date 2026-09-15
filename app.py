@@ -18,21 +18,18 @@ st.title("🌾 Monitor de Pastoreo y Estado de Parcelas")
 # 1. CARGA DE DATOS Y FILTRADO
 # ==========================================
 
-# Parámetro de conexión a Google Sheets (Identificador de la planilla DB_Pastoreo)
-SHEET_ID = "1uDFTp_B8NMuu4vteXgAY_ACiStijAr6UZdC6bYSCVgA"
-url_movimientos = f"https://docs.google.com/spreadsheets/d/1uDFTp_B8NMuu4vteXgAY_ACiStijAr6UZdC6bYSCVgA/gviz/tq?tqx=out:csv&sheet=Movimientos"
-url_lotes = f"https://docs.google.com/spreadsheets/d/1uDFTp_B8NMuu4vteXgAY_ACiStijAr6UZdC6bYSCVgA/gviz/tq?tqx=out:csv&sheet=Lotes"
+SHEET_ID = "1uDFTp_B8NMuu4vtexGAY_ACiStijAr6UZdC6bYSCVgA"
+
+url_movimientos = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Movimientos"
+url_lotes = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Lotes"
 
 @st.cache_data(ttl=300)
 def cargar_datos():
-    # Cargar datos espaciales
     gdf_raw = gpd.read_file("mapa_predio.geojson")
     
-    # Asegurar que esté en coordenadas geográficas WGS 1984
     if gdf_raw.crs != "EPSG:4326":
         gdf_raw = gdf_raw.to_crs(epsg=4326)
     
-    # Cargar planillas desde Google Sheets
     df_mov = pd.read_csv(url_movimientos)
     df_lot = pd.read_csv(url_lotes)
     
@@ -43,15 +40,12 @@ try:
 
     # Separar polígono de control (Área excluida)
     gdf_borde = gdf_todo[gdf_todo['ID_Parcela'] == 'EXCLUIDO']
-    
-    # Dejar solo parcelas productivas para el análisis
     gdf_parcelas = gdf_todo[gdf_todo['ID_Parcela'] != 'EXCLUIDO'].copy()
 
     # ==========================================
-    # 2. PROCESAMIENTO DE ESTADO ACTUAL DE PARCELAS
+    # 2. PROCESAMIENTO DE ESTADO ACTUAL
     # ==========================================
 
-    # Convertir campo de fecha
     df_movimientos['Fecha_Hora'] = pd.to_datetime(df_movimientos['Fecha_Hora'])
     
     # Obtener el último movimiento para cada parcela de destino
@@ -62,7 +56,7 @@ try:
         .reset_index()
     )
 
-    # Fusionar información de lotes con los movimientos
+    # Fusionar con lotes
     mov_con_lotes = ultimos_mov.merge(
         df_lotes, 
         left_on='ID_Lote', 
@@ -73,6 +67,9 @@ try:
     # Calcular días de permanencia
     hoy = datetime.now()
     mov_con_lotes['Dias_En_Parcela'] = (hoy - mov_con_lotes['Fecha_Hora']).dt.days
+
+    # CONVERSIÓN CRÍTICA: Transformar Timestamp a texto para evitar error de serialización JSON en Folium
+    mov_con_lotes['Fecha_Hora'] = mov_con_lotes['Fecha_Hora'].dt.strftime('%Y-%m-%d %H:%M')
 
     # Cruzar geometrías con la información procesada
     gdf_resultado = gdf_parcelas.merge(
@@ -85,31 +82,32 @@ try:
     # Determinar estado de ocupación
     gdf_resultado['Ocupado'] = gdf_resultado['ID_Lote'].notna()
 
+    # Llenar valores nulos para mostrar textos limpios en la etiqueta (Tooltip)
+    gdf_resultado['ID_Lote'] = gdf_resultado['ID_Lote'].fillna('Sin Lote (Libre)')
+    gdf_resultado['Dias_En_Parcela'] = gdf_resultado['Dias_En_Parcela'].fillna(0).astype(int)
+
     # ==========================================
     # 3. CONSTRUCCIÓN DEL MAPA INTERACTIVO
     # ==========================================
 
-    # Calcular centroide para centrar la vista del mapa
     centroide = gdf_todo.geometry.unary_union.centroid
     m = folium.Map(location=[centroide.y, centroide.x], zoom_start=14, tiles="OpenStreetMap")
 
-    # Función para definir el color de las parcelas según ocupación
     def estilar_parcela(feature):
         ocupado = feature['properties'].get('Ocupado', False)
         return {
-            'fillColor': '#e74c3c' if ocupado else '#2ecc71',  # Rojo si está ocupado, Verde si está libre
+            'fillColor': '#e74c3c' if ocupado else '#2ecc71',  # Rojo = Ocupado, Verde = Libre
             'color': '#2c3e50',
             'weight': 1.5,
             'fillOpacity': 0.6
         }
 
-    # Agregar capas de parcelas productivas
     folium.GeoJson(
         gdf_resultado,
         style_function=estilar_parcela,
         tooltip=folium.GeoJsonTooltip(
             fields=['ID_Parcela', 'NOMBRE', 'ID_Lote', 'Dias_En_Parcela'],
-            aliases=['Parcela:', 'Nombre:', 'Lote Presente:', 'Días en Potrero:'],
+            aliases=['Parcela:', 'Nombre:', 'Estado / Lote:', 'Días en Potrero:'],
             localize=True
         ),
         name="Parcelas"
