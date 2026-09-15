@@ -18,10 +18,10 @@ st.title("🌾 Monitor de Pastoreo y Estado de Parcelas")
 # 1. CARGA DE DATOS Y FILTRADO
 # ==========================================
 
-SHEET_ID = "1uDFTp_B8NMuu4vtexGAY_ACiStijAr6UZdC6bYSCVgA"
+SHEET_ID = "1uDFTp_B8NMuu4vteXgAY_ACiStijAr6UZdC6bYSCVgA"
 
-url_movimientos = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Movimientos"
-url_lotes = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Lotes"
+url_movimientos = f"https://docs.google.com/spreadsheets/d/1uDFTp_B8NMuu4vteXgAY_ACiStijAr6UZdC6bYSCVgA/gviz/tq?tqx=out:csv&sheet=Movimientos"
+url_lotes = f"https://docs.google.com/spreadsheets/d/1uDFTp_B8NMuu4vteXgAY_ACiStijAr6UZdC6bYSCVgA/gviz/tq?tqx=out:csv&sheet=Lotes"
 
 @st.cache_data(ttl=300)
 def cargar_datos():
