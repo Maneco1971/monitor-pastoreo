@@ -68,7 +68,7 @@ try:
     hoy = datetime.now()
     mov_con_lotes['Dias_En_Parcela'] = (hoy - mov_con_lotes['Fecha_Hora']).dt.days
 
-    # Formatear fecha para evitar errores de JSON
+    # Formatear la fecha a texto explícito
     mov_con_lotes['Fecha_Ingreso_Txt'] = mov_con_lotes['Fecha_Hora'].dt.strftime('%d/%m/%Y %H:%M')
 
     # Cruzar geometrías con la información de pastoreo
@@ -78,6 +78,11 @@ try:
         right_on='ID_Parcela_Destino',
         how='left'
     )
+
+    # SANITIZACIÓN CRÍTICA PARA FOLIUM:
+    # Eliminar o convertir cualquier columna de tipo Timestamp a string dentro de gdf_resultado
+    for col in gdf_resultado.select_dtypes(include=['datetime64', 'datetime64[ns]', 'datetime64[ns, UTC]']).columns:
+        gdf_resultado[col] = gdf_resultado[col].astype(str)
 
     # Definir ocupación
     gdf_resultado['Ocupado'] = gdf_resultado['ID_Lote'].notna()
