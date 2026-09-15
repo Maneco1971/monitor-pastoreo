@@ -97,7 +97,7 @@ try:
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.subheader("🗺️ Mapa del Predio")
+        st.subheader("🗺️ Mapa de Glencoe")
         centroide = gdf_todo.geometry.unary_union.centroid
         m = folium.Map(location=[centroide.y, centroide.x], zoom_start=14, tiles="OpenStreetMap")
 
