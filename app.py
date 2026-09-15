@@ -1,95 +1,144 @@
 import streamlit as st
-import pandas as pd
 import geopandas as gpd
+import pandas as pd
 import folium
 from streamlit_folium import st_folium
 from datetime import datetime
 
-st.set_page_config(page_title="Monitor de Pastoreo", layout="wide")
+# Configuración de la página
+st.set_page_config(
+    page_title="Monitor de Pastoreo",
+    page_icon="🌾",
+    layout="wide"
+)
 
-# 1. Carga de datos espaciales y transaccionales
-@st.cache_data(ttl=300) # Recarga cada 5 minutos
-def load_data():
-    # Cargar archivo de polígonos (KML convertido a GeoJSON)
-    gdf_parcelas = gpd.read_file("mapa_predio.geojson")
-    
-    # Enlace de exportación CSV directo desde Google Sheets
+st.title("🌾 Monitor de Pastoreo y Estado de Parcelas")
+
+# ==========================================
+# 1. CARGA DE DATOS Y FILTRADO
+# ==========================================
+
+# Parámetro de conexión a Google Sheets (Identificador de la planilla DB_Pastoreo)
     SHEET_ID = "1uDFTp_B8NMuu4vteXgAY_ACiStijAr6UZdC6bYSCVgA"
     
     url_movimientos = f"https://docs.google.com/spreadsheets/d/1uDFTp_B8NMuu4vteXgAY_ACiStijAr6UZdC6bYSCVgA/gviz/tq?tqx=out:csv&sheet=Movimientos"
     url_lotes = f"https://docs.google.com/spreadsheets/d/1uDFTp_B8NMuu4vteXgAY_ACiStijAr6UZdC6bYSCVgA/gviz/tq?tqx=out:csv&sheet=Lotes"
+
+@st.cache_data(ttl=300)
+def cargar_datos():
+    # Cargar datos espaciales
+    gdf_raw = gpd.read_file("mapa_predio.geojson")
     
+    # Asegurar que esté en coordenadas geográficas WGS 1984
+    if gdf_raw.crs != "EPSG:4326":
+        gdf_raw = gdf_raw.to_crs(epsg=4326)
+    
+    # Cargar planillas desde Google Sheets
     df_mov = pd.read_csv(url_movimientos)
-    df_lotes = pd.read_csv(url_lotes)
+    df_lot = pd.read_csv(url_lotes)
     
-    return gdf_parcelas, df_mov, df_lotes
+    return gdf_raw, df_mov, df_lot
 
-gdf_parcelas, df_mov, df_lotes = load_data()
+try:
+    gdf_todo, df_movimientos, df_lotes = cargar_datos()
 
-# 2. Procesamiento transaccional (Event Sourcing)
-df_mov['Fecha_Hora'] = pd.to_datetime(df_mov['Fecha_Hora'])
-df_mov = df_mov.sort_values('Fecha_Hora')
-
-# Identificar la ubicación actual de cada lote (último movimiento)
-df_pos_actual = df_mov.groupby('ID_Lote').last().reset_index()
-
-# Cruzar con información del lote (Categoría y Cabezas)
-df_pos_actual = df_pos_actual.merge(df_lotes, on='ID_Lote', how='left')
-
-# Calcular días de estancia actual por lote
-ahora = pd.Timestamp.now()
-df_pos_actual['Dias_Ocupacion'] = (ahora - df_pos_actual['Fecha_Hora']).dt.days
-
-# Agrupar por parcela para soportar pastoreo mixto (múltiples lotes en un potrero)
-resumen_parcelas = df_pos_actual.groupby('ID_Parcela_Destino').agg(
-    Lotes_Presentes=('ID_Lote', lambda x: ", ".join(x)),
-    Categorias=('Categoria_Animal', lambda x: ", ".join(x.dropna().unique())),
-    Total_Cabezas=('Cabezas', 'sum'),
-    Dias_Ocupacion_Max=('Dias_Ocupacion', 'max')
-).reset_index()
-
-# 3. Integración con el GeoDataFrame
-gdf_mapa = gdf_parcelas.merge(resumen_parcelas, left_on='ID_Parcela', right_on='ID_Parcela_Destino', how='left')
-
-# Asignar estado espacial
-gdf_mapa['Estado'] = gdf_mapa['Lotes_Presentes'].apply(lambda x: 'Ocupado' if pd.notnull(x) else 'Libre')
-
-# 4. Renderizado del Mapa con Folium
-st.title("🛰️ Monitor Geográfico de Pastoreo")
-
-m = folium.Map(location=[gdf_mapa.geometry.centroid.y.mean(), gdf_mapa.geometry.centroid.x.mean()], zoom_start=14)
-
-def style_function(feature):
-    estado = feature['properties']['Estado']
-    return {
-        'fillColor': '#ff4b4b' if estado == 'Ocupado' else '#00c853',
-        'color': 'black',
-        'weight': 1,
-        'fillOpacity': 0.6
-    }
-
-# Tooltip interactivo al pasar el cursor sobre la parcela
-tooltip = folium.GeoJsonTooltip(
-    fields=['ID_Parcela', 'Nombre', 'Estado', 'Lotes_Presentes', 'Categorias', 'Total_Cabezas', 'Dias_Ocupacion_Max'],
-    aliases=['Parcela:', 'Nombre:', 'Estado:', 'Lotes:', 'Categorías:', 'Cabezas Totales:', 'Días Ocupación:'],
-    localize=True
-)
-
-folium.GeoJson(
-    gdf_mapa,
-    style_function=style_function,
-    tooltip=tooltip
-).add_to(m)
-
-# Despliegue en la interfaz Streamlit
-col1, col2 = st.columns([3, 1])
-
-with col1:
-    st_folium(m, width=900, height=600)
-
-with col2:
-    st.metric("Potreros Ocupados", len(gdf_mapa[gdf_mapa['Estado'] == 'Ocupado']))
-    st.metric("Potreros Libres", len(gdf_mapa[gdf_mapa['Estado'] == 'Libre']))
+    # Separar polígono de control (Área excluida)
+    gdf_borde = gdf_todo[gdf_todo['ID_Parcela'] == 'EXCLUIDO']
     
-    st.subheader("Detalle de Lotes")
-    st.dataframe(df_pos_actual[['ID_Lote', 'Categoria_Animal', 'Cabezas', 'ID_Parcela_Destino', 'Dias_Ocupacion']])
+    # Dejar solo parcelas productivas para el análisis
+    gdf_parcelas = gdf_todo[gdf_todo['ID_Parcela'] != 'EXCLUIDO'].copy()
+
+    # ==========================================
+    # 2. PROCESAMIENTO DE ESTADO ACTUAL DE PARCELAS
+    # ==========================================
+
+    # Convertir campo de fecha
+    df_movimientos['Fecha_Hora'] = pd.to_datetime(df_movimientos['Fecha_Hora'])
+    
+    # Obtener el último movimiento para cada parcela de destino
+    ultimos_mov = (
+        df_movimientos.sort_values('Fecha_Hora')
+        .groupby('ID_Parcela_Destino')
+        .last()
+        .reset_index()
+    )
+
+    # Fusionar información de lotes con los movimientos
+    mov_con_lotes = ultimos_mov.merge(
+        df_lotes, 
+        left_on='ID_Lote', 
+        right_on='ID_Lote', 
+        how='left'
+    )
+
+    # Calcular días de permanencia
+    hoy = datetime.now()
+    mov_con_lotes['Dias_En_Parcela'] = (hoy - mov_con_lotes['Fecha_Hora']).dt.days
+
+    # Cruzar geometrías con la información procesada
+    gdf_resultado = gdf_parcelas.merge(
+        mov_con_lotes,
+        left_on='ID_Parcela',
+        right_on='ID_Parcela_Destino',
+        how='left'
+    )
+
+    # Determinar estado de ocupación
+    gdf_resultado['Ocupado'] = gdf_resultado['ID_Lote'].notna()
+
+    # ==========================================
+    # 3. CONSTRUCCIÓN DEL MAPA INTERACTIVO
+    # ==========================================
+
+    # Calcular centroide para centrar la vista del mapa
+    centroide = gdf_todo.geometry.unary_union.centroid
+    m = folium.Map(location=[centroide.y, centroide.x], zoom_start=14, tiles="OpenStreetMap")
+
+    # Función para definir el color de las parcelas según ocupación
+    def estilar_parcela(feature):
+        ocupado = feature['properties'].get('Ocupado', False)
+        return {
+            'fillColor': '#e74c3c' if ocupado else '#2ecc71',  # Rojo si está ocupado, Verde si está libre
+            'color': '#2c3e50',
+            'weight': 1.5,
+            'fillOpacity': 0.6
+        }
+
+    # Agregar capas de parcelas productivas
+    folium.GeoJson(
+        gdf_resultado,
+        style_function=estilar_parcela,
+        tooltip=folium.GeoJsonTooltip(
+            fields=['ID_Parcela', 'NOMBRE', 'ID_Lote', 'Dias_En_Parcela'],
+            aliases=['Parcela:', 'Nombre:', 'Lote Presente:', 'Días en Potrero:'],
+            localize=True
+        ),
+        name="Parcelas"
+    ).add_to(m)
+
+    # ==========================================
+    # 4. AGREGAR BORDE EXCLUIDO (ELP)
+    # ==========================================
+
+    if not gdf_borde.empty:
+        capa_borde = folium.GeoJson(
+            gdf_borde,
+            style_function=lambda feature: {
+                'color': 'black',
+                'weight': 3,
+                'fillOpacity': 0,
+                'dashArray': '5, 5'
+            },
+            name="Área Excluida"
+        )
+        folium.Tooltip("ELP").add_to(capa_borde)
+        capa_borde.add_to(m)
+
+    # ==========================================
+    # 5. MOSTRAR EN STREAMLIT
+    # ==========================================
+
+    st_folium(m, width=1000, height=600)
+
+except Exception as e:
+    st.error(f"Error al cargar o procesar los datos: {e}")
