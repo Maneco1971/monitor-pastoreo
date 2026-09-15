@@ -11,7 +11,7 @@ st.set_page_config(page_title="Monitor de Pastoreo", layout="wide")
 @st.cache_data(ttl=300) # Recarga cada 5 minutos
 def load_data():
     # Cargar archivo de polígonos (KML convertido a GeoJSON)
-    gdf_parcelas = gpd.read_file("glencoe.geojson")
+    gdf_parcelas = gpd.read_file("mapa_predio.geojson")
     
     # Enlace de exportación CSV directo desde Google Sheets
     SHEET_ID = "1uDFTp_B8NMuu4vteXgAY_ACiStijAr6UZdC6bYSCVgA"
