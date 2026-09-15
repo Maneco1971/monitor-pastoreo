@@ -12,7 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🌾 Monitor de Pastoreo y Estado de Parcelas")
+st.title("Monitor de Pastoreo")
 
 # ==========================================
 # 1. CARGA DE DATOS Y FILTRADO
