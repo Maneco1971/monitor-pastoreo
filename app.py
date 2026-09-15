@@ -149,13 +149,13 @@ try:
         if not df_ocupadas.empty:
             tabla_mostrar = df_ocupadas[[
                 'ID_Parcela', 
-                'NOMBRE', 
+                'Nombre', 
                 'ID_Lote', 
                 'Fecha_Ingreso_Txt', 
                 'Dias_En_Parcela_Mostrar'
             ]].rename(columns={
                 'ID_Parcela': 'ID',
-                'NOMBRE': 'Potrero',
+                'Nombre': 'Potrero',
                 'ID_Lote': 'Lote Actual',
                 'Fecha_Ingreso_Txt': 'Fecha Ingreso',
                 'Dias_En_Parcela_Mostrar': 'Días'
