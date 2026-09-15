@@ -20,8 +20,8 @@ st.title("🌾 Monitor de Pastoreo y Estado de Parcelas")
 
 SHEET_ID = "1uDFTp_B8NMuu4vteXgAY_ACiStijAr6UZdC6bYSCVgA"
 
-url_movimientos = f"https://docs.google.com/spreadsheets/d/1uDFTp_B8NMuu4vteXgAY_ACiStijAr6UZdC6bYSCVgA/gviz/tq?tqx=out:csv&sheet=Movimientos"
-url_lotes = f"https://docs.google.com/spreadsheets/d/1uDFTp_B8NMuu4vteXgAY_ACiStijAr6UZdC6bYSCVgA/gviz/tq?tqx=out:csv&sheet=Lotes"
+url_movimientos = "https://docs.google.com/spreadsheets/d/1uDFTp_B8NMuu4vteXgAY_ACiStijAr6UZdC6bYSCVgA/gviz/tq?tqx=out:csv&sheet=Movimientos"
+url_lotes = "https://docs.google.com/spreadsheets/d/1uDFTp_B8NMuu4vteXgAY_ACiStijAr6UZdC6bYSCVgA/gviz/tq?tqx=out:csv&sheet=Lotes"
 
 @st.cache_data(ttl=300)
 def cargar_datos():
@@ -48,7 +48,7 @@ try:
 
     df_movimientos['Fecha_Hora'] = pd.to_datetime(df_movimientos['Fecha_Hora'])
     
-    # Obtener el último movimiento para cada parcela de destino
+    # Obtener el último movimiento por parcela de destino
     ultimos_mov = (
         df_movimientos.sort_values('Fecha_Hora')
         .groupby('ID_Parcela_Destino')
@@ -68,10 +68,10 @@ try:
     hoy = datetime.now()
     mov_con_lotes['Dias_En_Parcela'] = (hoy - mov_con_lotes['Fecha_Hora']).dt.days
 
-    # CONVERSIÓN CRÍTICA: Transformar Timestamp a texto para evitar error de serialización JSON en Folium
-    mov_con_lotes['Fecha_Hora'] = mov_con_lotes['Fecha_Hora'].dt.strftime('%Y-%m-%d %H:%M')
+    # Formatear fecha para evitar errores de JSON
+    mov_con_lotes['Fecha_Ingreso_Txt'] = mov_con_lotes['Fecha_Hora'].dt.strftime('%d/%m/%Y %H:%M')
 
-    # Cruzar geometrías con la información procesada
+    # Cruzar geometrías con la información de pastoreo
     gdf_resultado = gdf_parcelas.merge(
         mov_con_lotes,
         left_on='ID_Parcela',
@@ -79,63 +79,92 @@ try:
         how='left'
     )
 
-    # Determinar estado de ocupación
+    # Definir ocupación
     gdf_resultado['Ocupado'] = gdf_resultado['ID_Lote'].notna()
 
-    # Llenar valores nulos para mostrar textos limpios en la etiqueta (Tooltip)
-    gdf_resultado['ID_Lote'] = gdf_resultado['ID_Lote'].fillna('Sin Lote (Libre)')
-    gdf_resultado['Dias_En_Parcela'] = gdf_resultado['Dias_En_Parcela'].fillna(0).astype(int)
+    gdf_resultado['ID_Lote_Mostrar'] = gdf_resultado['ID_Lote'].fillna('Sin Lote (Libre)')
+    gdf_resultado['Dias_En_Parcela_Mostrar'] = gdf_resultado['Dias_En_Parcela'].fillna(0).astype(int)
 
     # ==========================================
     # 3. CONSTRUCCIÓN DEL MAPA INTERACTIVO
     # ==========================================
 
-    centroide = gdf_todo.geometry.unary_union.centroid
-    m = folium.Map(location=[centroide.y, centroide.x], zoom_start=14, tiles="OpenStreetMap")
+    col1, col2 = st.columns([2, 1])
 
-    def estilar_parcela(feature):
-        ocupado = feature['properties'].get('Ocupado', False)
-        return {
-            'fillColor': '#e74c3c' if ocupado else '#2ecc71',  # Rojo = Ocupado, Verde = Libre
-            'color': '#2c3e50',
-            'weight': 1.5,
-            'fillOpacity': 0.6
-        }
+    with col1:
+        st.subheader("🗺️ Mapa del Predio")
+        centroide = gdf_todo.geometry.unary_union.centroid
+        m = folium.Map(location=[centroide.y, centroide.x], zoom_start=14, tiles="OpenStreetMap")
 
-    folium.GeoJson(
-        gdf_resultado,
-        style_function=estilar_parcela,
-        tooltip=folium.GeoJsonTooltip(
-            fields=['ID_Parcela', 'Nombre', 'ID_Lote', 'Dias_En_Parcela'],
-            aliases=['Parcela:', 'Nombre:', 'Estado / Lote:', 'Días en Potrero:'],
-            localize=True
-        ),
-        name="Parcelas"
-    ).add_to(m)
+        def estilar_parcela(feature):
+            ocupado = feature['properties'].get('Ocupado', False)
+            return {
+                'fillColor': '#e74c3c' if ocupado else '#2ecc71',
+                'color': '#2c3e50',
+                'weight': 1.5,
+                'fillOpacity': 0.6
+            }
+
+        folium.GeoJson(
+            gdf_resultado,
+            style_function=estilar_parcela,
+            tooltip=folium.GeoJsonTooltip(
+                fields=['ID_Parcela', 'NOMBRE', 'ID_Lote_Mostrar', 'Dias_En_Parcela_Mostrar'],
+                aliases=['Parcela:', 'Nombre:', 'Estado / Lote:', 'Días en Potrero:'],
+                localize=True
+            ),
+            name="Parcelas"
+        ).add_to(m)
+
+        if not gdf_borde.empty:
+            capa_borde = folium.GeoJson(
+                gdf_borde,
+                style_function=lambda feature: {
+                    'color': 'black',
+                    'weight': 3,
+                    'fillOpacity': 0,
+                    'dashArray': '5, 5'
+                },
+                name="Área Excluida"
+            )
+            folium.Tooltip("ELP").add_to(capa_borde)
+            capa_borde.add_to(m)
+
+        st_folium(m, width=750, height=550)
 
     # ==========================================
-    # 4. AGREGAR BORDE EXCLUIDO (ELP)
+    # 4. TABLA RESUMEN DE PARCELAS OCUPADAS
     # ==========================================
 
-    if not gdf_borde.empty:
-        capa_borde = folium.GeoJson(
-            gdf_borde,
-            style_function=lambda feature: {
-                'color': 'black',
-                'weight': 3,
-                'fillOpacity': 0,
-                'dashArray': '5, 5'
-            },
-            name="Área Excluida"
-        )
-        folium.Tooltip("ELP").add_to(capa_borde)
-        capa_borde.add_to(m)
+    with col2:
+        st.subheader("📋 Parcelas Ocupadas")
+        
+        df_ocupadas = gdf_resultado[gdf_resultado['Ocupado'] == True].copy()
 
-    # ==========================================
-    # 5. MOSTRAR EN STREAMLIT
-    # ==========================================
+        if not df_ocupadas.empty:
+            tabla_mostrar = df_ocupadas[[
+                'ID_Parcela', 
+                'NOMBRE', 
+                'ID_Lote', 
+                'Fecha_Ingreso_Txt', 
+                'Dias_En_Parcela_Mostrar'
+            ]].rename(columns={
+                'ID_Parcela': 'ID',
+                'NOMBRE': 'Potrero',
+                'ID_Lote': 'Lote Actual',
+                'Fecha_Ingreso_Txt': 'Fecha Ingreso',
+                'Dias_En_Parcela_Mostrar': 'Días'
+            })
 
-    st_folium(m, width=1000, height=600)
+            st.dataframe(
+                tabla_mostrar, 
+                hide_index=True, 
+                use_container_width=True
+            )
+            
+            st.metric("Total Parcelas Ocupadas", len(df_ocupadas))
+        else:
+            st.info("No hay parcelas ocupadas en este momento.")
 
 except Exception as e:
     st.error(f"Error al cargar o procesar los datos: {e}")
