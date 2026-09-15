@@ -114,8 +114,8 @@ try:
             gdf_resultado,
             style_function=estilar_parcela,
             tooltip=folium.GeoJsonTooltip(
-                fields=['ID_Parcela', 'Nombre', 'ID_Lote_Mostrar', 'Dias_En_Parcela_Mostrar'],
-                aliases=['Parcela:', 'Nombre:', 'Estado / Lote:', 'Días en Potrero:'],
+                fields=['Nombre', 'ID_Lote_Mostrar', 'Dias_En_Parcela_Mostrar'],
+                aliases=['Nombre:', 'Estado / Lote:', 'Días en Potrero:'],
                 localize=True
             ),
             name="Parcelas"
