@@ -2,6 +2,7 @@ import streamlit as st
 import geopandas as gpd
 import pandas as pd
 import folium
+from folium.plugins import Fullscreen
 from streamlit_folium import st_folium
 from datetime import datetime
 
@@ -12,7 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("Monitor de Pastoreo")
+st.title("GLENCOE - Monitor de Pastoreo")
 
 # ==========================================
 # 1. CARGA DE DATOS Y FILTRADO
@@ -97,10 +98,15 @@ try:
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.subheader("🗺️ Mapa de Glencoe")
         centroide = gdf_todo.geometry.unary_union.centroid
         m = folium.Map(location=[centroide.y, centroide.x], zoom_start=14, tiles="OpenStreetMap")
-
+# 2. AGREGAR PLUGIN DE PANTALLA COMPLETA
+        Fullscreen(
+            position='topright',
+            title='Expandir a pantalla completa',
+            titleCancel='Salir de pantalla completa',
+            forceSeparateButton=True
+        ).add_to(m)
         def estilar_parcela(feature):
             ocupado = feature['properties'].get('Ocupado', False)
             return {
@@ -135,7 +141,7 @@ try:
             folium.Tooltip("ELP").add_to(capa_borde)
             capa_borde.add_to(m)
 
-        st_folium(m, width=750, height=550)
+        st_folium(m, height=750, use_container_width=True)
 
     # ==========================================
     # 4. TABLA RESUMEN DE PARCELAS OCUPADAS
