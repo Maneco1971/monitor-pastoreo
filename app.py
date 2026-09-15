@@ -115,7 +115,7 @@ try:
             style_function=estilar_parcela,
             tooltip=folium.GeoJsonTooltip(
                 fields=['Nombre', 'ID_Lote_Mostrar', 'Dias_En_Parcela_Mostrar'],
-                aliases=['Nombre:', 'Estado / Lote:', 'Días en Potrero:'],
+                aliases=['Nombre:', 'Lote:', 'Días en Potrero:'],
                 localize=True
             ),
             name="Parcelas"
