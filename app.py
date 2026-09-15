@@ -6,6 +6,19 @@ from folium.plugins import Fullscreen
 from streamlit_folium import st_folium
 from datetime import datetime
 
+# ==========================================
+# FUNCIONES AUXILIARES
+# ==========================================
+def obtener_color_dias(dias, dias_maximos=30):
+    if pd.isna(dias) or dias is None:
+        return '#ffffff'
+    
+    factor = min(max(dias / dias_maximos, 0.0), 1.0)
+    r = int(46 + factor * (231 - 46))
+    g = int(204 + factor * (76 - 204))
+    b = int(113 + factor * (60 - 113))
+    return f'#{r:02x}{g:02x}{b:02x}'
+
 # Configuración de la página
 st.set_page_config(
     page_title="Monitor de Pastoreo",
@@ -49,47 +62,50 @@ try:
 
     df_movimientos['Fecha_Hora'] = pd.to_datetime(df_movimientos['Fecha_Hora'])
     
-    # Obtener el último movimiento por parcela de destino
-    ultimos_mov = (
+    # Obtener el último movimiento POR LOTE para conocer la ubicación actual de cada uno
+    ultimos_mov_lote = (
         df_movimientos.sort_values('Fecha_Hora')
-        .groupby('ID_Parcela_Destino')
+        .groupby('ID_Lote')
         .last()
         .reset_index()
     )
 
-    # Fusionar con lotes
-    mov_con_lotes = ultimos_mov.merge(
+    # Fusionar con la información de los lotes
+    mov_con_lotes = ultimos_mov_lote.merge(
         df_lotes, 
-        left_on='ID_Lote', 
-        right_on='ID_Lote', 
+        on='ID_Lote', 
         how='left'
     )
 
-    # Calcular días de permanencia
+    # Calcular días de permanencia individuales
     hoy = datetime.now()
     mov_con_lotes['Dias_En_Parcela'] = (hoy - mov_con_lotes['Fecha_Hora']).dt.days
-
-    # Formatear la fecha a texto explícito
     mov_con_lotes['Fecha_Ingreso_Txt'] = mov_con_lotes['Fecha_Hora'].dt.strftime('%d/%m/%Y %H:%M')
 
-    # Cruzar geometrías con la información de pastoreo
+    # Agrupar por parcela destino para permitir múltiples lotes
+    resumen_parcela = mov_con_lotes.groupby('ID_Parcela_Destino').agg(
+        Lotes_Presentes=('ID_Lote', lambda x: ' + '.join(x.astype(str))),
+        Dias_Maximos=('Dias_En_Parcela', 'max'),
+        Fechas_Ingreso=('Fecha_Ingreso_Txt', lambda x: ' | '.join(x.astype(str)))
+    ).reset_index()
+
+    # Cruzar geometrías con la información agregada de pastoreo
     gdf_resultado = gdf_parcelas.merge(
-        mov_con_lotes,
+        resumen_parcela,
         left_on='ID_Parcela',
         right_on='ID_Parcela_Destino',
         how='left'
     )
 
     # SANITIZACIÓN CRÍTICA PARA FOLIUM:
-    # Eliminar o convertir cualquier columna de tipo Timestamp a string dentro de gdf_resultado
     for col in gdf_resultado.select_dtypes(include=['datetime64', 'datetime64[ns]', 'datetime64[ns, UTC]']).columns:
         gdf_resultado[col] = gdf_resultado[col].astype(str)
 
-    # Definir ocupación
-    gdf_resultado['Ocupado'] = gdf_resultado['ID_Lote'].notna()
-
-    gdf_resultado['ID_Lote_Mostrar'] = gdf_resultado['ID_Lote'].fillna('Sin Lote (Libre)')
-    gdf_resultado['Dias_En_Parcela_Mostrar'] = gdf_resultado['Dias_En_Parcela'].fillna(0).astype(int)
+    # Definir variables consolidadas para visualización
+    gdf_resultado['Ocupado'] = gdf_resultado['Lotes_Presentes'].notna()
+    gdf_resultado['ID_Lote_Mostrar'] = gdf_resultado['Lotes_Presentes'].fillna('Sin Lote (Libre)')
+    gdf_resultado['Dias_En_Parcela_Mostrar'] = gdf_resultado['Dias_Maximos'].fillna(0).astype(int)
+    gdf_resultado['Fechas_Ingreso_Mostrar'] = gdf_resultado['Fechas_Ingreso'].fillna('-')
 
     # ==========================================
     # 3. CONSTRUCCIÓN DEL MAPA INTERACTIVO
@@ -100,20 +116,23 @@ try:
     with col1:
         centroide = gdf_todo.geometry.unary_union.centroid
         m = folium.Map(location=[centroide.y, centroide.x], zoom_start=14, tiles="OpenStreetMap")
-# 2. AGREGAR PLUGIN DE PANTALLA COMPLETA
+        
+        # AGREGAR PLUGIN DE PANTALLA COMPLETA
         Fullscreen(
             position='topright',
             title='Expandir a pantalla completa',
             titleCancel='Salir de pantalla completa',
             forceSeparateButton=True
         ).add_to(m)
+        
         def estilar_parcela(feature):
             ocupado = feature['properties'].get('Ocupado', False)
+            dias = feature['properties'].get('Dias_En_Parcela_Mostrar', 0)
             return {
-                'fillColor': '#e74c3c' if ocupado else '#2ecc71',
+                'fillColor': obtener_color_dias(dias, 30) if ocupado else '#ffffff',
                 'color': '#2c3e50',
                 'weight': 1.5,
-                'fillOpacity': 0.6
+                'fillOpacity': 0.7 if ocupado else 0.4
             }
 
         folium.GeoJson(
@@ -121,7 +140,7 @@ try:
             style_function=estilar_parcela,
             tooltip=folium.GeoJsonTooltip(
                 fields=['Nombre', 'ID_Lote_Mostrar', 'Dias_En_Parcela_Mostrar'],
-                aliases=['Nombre:', 'Lote:', 'Días en Potrero:'],
+                aliases=['Nombre:', 'Lote(s):', 'Días en Potrero (Max):'],
                 localize=True
             ),
             name="Parcelas"
@@ -156,15 +175,15 @@ try:
             tabla_mostrar = df_ocupadas[[
                 'ID_Parcela', 
                 'Nombre', 
-                'ID_Lote', 
-                'Fecha_Ingreso_Txt', 
+                'ID_Lote_Mostrar', 
+                'Fechas_Ingreso_Mostrar', 
                 'Dias_En_Parcela_Mostrar'
             ]].rename(columns={
                 'ID_Parcela': 'ID',
                 'Nombre': 'Potrero',
-                'ID_Lote': 'Lote Actual',
-                'Fecha_Ingreso_Txt': 'Fecha Ingreso',
-                'Dias_En_Parcela_Mostrar': 'Días'
+                'ID_Lote_Mostrar': 'Lote(s) Actual(es)',
+                'Fechas_Ingreso_Mostrar': 'Fecha(s) Ingreso',
+                'Dias_En_Parcela_Mostrar': 'Días (Máx)'
             })
 
             st.dataframe(
