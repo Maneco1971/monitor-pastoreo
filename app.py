@@ -95,7 +95,7 @@ try:
     hoy = datetime.now()
     lotes_estado['Fecha_Hora'] = pd.to_datetime(lotes_estado['Fecha_Hora'], format='mixed', dayfirst=True, errors='coerce')
     lotes_estado['Dias_En_Parcela'] = (hoy - lotes_estado['Fecha_Hora']).dt.days.fillna(0)
-    lotes_estado['Fecha_Ingreso_Txt'] = lotes_estado['Fecha_Hora'].dt.strftime('%d/%m/%Y %H:%M').fillna('Origen Inicial')
+    lotes_estado['Fecha_Ingreso_Txt'] = lotes_estado['Fecha_Hora'].dt.strftime('%d/%m/%Y').fillna('Origen Inicial')
 
     # 5. Agrupar por ubicación usando la nueva etiqueta descriptiva
     resumen_parcela = lotes_estado.groupby('Parcela_Actual').agg(
