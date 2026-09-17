@@ -145,7 +145,7 @@ try:
     gdf_resultado['Dias_En_Parcela_Mostrar'] = gdf_resultado['Dias_Maximos'].fillna(0).astype(int)
     gdf_resultado['Fechas_Ingreso_Mostrar'] = gdf_resultado['Fechas_Ingreso'].fillna('-')
 
-    # ==========================================
+# ==========================================
     # 3. CONSTRUCCIÓN DEL MAPA INTERACTIVO
     # ==========================================
 
@@ -163,7 +163,7 @@ try:
             forceSeparateButton=True
         ).add_to(m)
         
-    def estilar_parcela(feature):
+        def estilar_parcela(feature):
             ocupado = feature['properties'].get('Ocupado', False)
             color_asignado = feature['properties'].get('Color_Mapa')
             
@@ -178,7 +178,7 @@ try:
                 'fillOpacity': 0.7 if ocupado else 0.4
             }
 
-    folium.GeoJson(
+        folium.GeoJson(
             gdf_resultado,
             style_function=estilar_parcela,
             tooltip=folium.GeoJsonTooltip(
