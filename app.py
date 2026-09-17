@@ -59,11 +59,30 @@ try:
     # ==========================================
     # 2. PROCESAMIENTO DE ESTADO ACTUAL
     # ==========================================
-
-    df_movimientos['Fecha_Hora'] = pd.to_datetime(df_movimientos['Fecha_Hora'])
+df_movimientos['Fecha_Hora'] = pd.to_datetime(df_movimientos['Fecha_Hora'])
     
-    # 1. Tomar la tabla Lotes como base (para no perder los que no tienen movimientos)
+    # 1. Tomar la tabla Lotes como base
     lotes_estado = df_lotes.copy()
+
+    # --- NUEVO: Construcción de etiqueta descriptiva ---
+    def construir_etiqueta(row):
+        # Convertir cabezas a entero para quitar decimales, asumiendo 0 si está vacío
+        cabezas = str(int(row['Cabezas'])) if pd.notna(row['Cabezas']) else "0"
+        categoria = str(row['Categoria_Animal']) if pd.notna(row['Categoria_Animal']) else ""
+        observaciones = str(row['Observaciones']) if pd.notna(row['Observaciones']) else ""
+        
+        # Ensamblar: "45 Vacas de cría"
+        texto = f"{cabezas} {categoria}".strip()
+        
+        # Añadir observaciones solo si existen: "45 Vacas de cría (Hereford)"
+        if observaciones.strip():
+            texto += f" ({observaciones})"
+            
+        return texto
+
+    # Aplicar la función fila por fila
+    lotes_estado['Etiqueta_Lote'] = lotes_estado.apply(construir_etiqueta, axis=1)
+    # ---------------------------------------------------
 
     # 2. Extraer el último movimiento si la tabla no está vacía
     if not df_movimientos.empty:
@@ -73,35 +92,35 @@ try:
         lotes_estado['ID_Parcela_Destino'] = None
         lotes_estado['Fecha_Hora'] = pd.NaT
 
-    # 3. Lógica de "Punto Cero": Usar destino si existe, de lo contrario usar parcela inicial
+    # 3. Lógica de "Punto Cero"
     if 'ID_Parcela_Inicial' not in lotes_estado.columns:
-        lotes_estado['ID_Parcela_Inicial'] = None # Prevención de error si la columna aún no sincroniza
+        lotes_estado['ID_Parcela_Inicial'] = None
         
     lotes_estado['Parcela_Actual'] = lotes_estado['ID_Parcela_Destino'].fillna(lotes_estado['ID_Parcela_Inicial'])
-
-    # Limpiar lotes sin ubicación asignada
     lotes_estado = lotes_estado.dropna(subset=['Parcela_Actual'])
 
-    # 4. Calcular días y formatear textos para lotes sin historial
+    # 4. Calcular días 
     hoy = datetime.now()
     lotes_estado['Fecha_Hora'] = pd.to_datetime(lotes_estado['Fecha_Hora'])
     lotes_estado['Dias_En_Parcela'] = (hoy - lotes_estado['Fecha_Hora']).dt.days.fillna(0)
     lotes_estado['Fecha_Ingreso_Txt'] = lotes_estado['Fecha_Hora'].dt.strftime('%d/%m/%Y %H:%M').fillna('Origen Inicial')
 
-    # 5. Agrupar por la ubicación definitiva (Parcela_Actual) permitiendo múltiples lotes
+    # 5. Agrupar por ubicación usando la nueva etiqueta descriptiva
     resumen_parcela = lotes_estado.groupby('Parcela_Actual').agg(
-        Lotes_Presentes=('ID_Lote', lambda x: ' + '.join(x.astype(str))),
+        # CAMBIO AQUI: En lugar de 'ID_Lote', unimos la 'Etiqueta_Lote'
+        Lotes_Presentes=('Etiqueta_Lote', lambda x: ' + '.join(x.astype(str))),
         Dias_Maximos=('Dias_En_Parcela', 'max'),
         Fechas_Ingreso=('Fecha_Ingreso_Txt', lambda x: ' | '.join(x.astype(str)))
     ).reset_index()
 
-    # 6. Cruzar geometrías con la información agregada
+    # 6. Cruzar geometrías
     gdf_resultado = gdf_parcelas.merge(
         resumen_parcela,
         left_on='ID_Parcela',
         right_on='Parcela_Actual',
         how='left'
     )
+   
     # SANITIZACIÓN CRÍTICA PARA FOLIUM:
     for col in gdf_resultado.select_dtypes(include=['datetime64', 'datetime64[ns]', 'datetime64[ns, UTC]']).columns:
         gdf_resultado[col] = gdf_resultado[col].astype(str)
