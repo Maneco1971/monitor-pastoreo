@@ -178,7 +178,7 @@ try:
                 'fillOpacity': 0.7 if ocupado else 0.4
             }
 
-        folium.GeoJson(
+    folium.GeoJson(
             gdf_resultado,
             style_function=estilar_parcela,
             tooltip=folium.GeoJsonTooltip(
