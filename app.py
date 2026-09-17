@@ -163,7 +163,7 @@ try:
             forceSeparateButton=True
         ).add_to(m)
         
-def estilar_parcela(feature):
+    def estilar_parcela(feature):
             ocupado = feature['properties'].get('Ocupado', False)
             color_asignado = feature['properties'].get('Color_Mapa')
             
