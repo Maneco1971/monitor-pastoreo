@@ -9,15 +9,6 @@ from datetime import datetime
 # ==========================================
 # FUNCIONES AUXILIARES
 # ==========================================
-def obtener_color_dias(dias, dias_maximos=30):
-    if pd.isna(dias) or dias is None:
-        return '#ffffff'
-    
-    factor = min(max(dias / dias_maximos, 0.0), 1.0)
-    r = int(46 + factor * (231 - 46))
-    g = int(204 + factor * (76 - 204))
-    b = int(113 + factor * (60 - 113))
-    return f'#{r:02x}{g:02x}{b:02x}'
 
 # Configuración de la página
 st.set_page_config(
@@ -108,11 +99,34 @@ try:
 
     # 5. Agrupar por ubicación usando la nueva etiqueta descriptiva
     resumen_parcela = lotes_estado.groupby('Parcela_Actual').agg(
-        # CAMBIO AQUI: En lugar de 'ID_Lote', unimos la 'Etiqueta_Lote'
         Lotes_Presentes=('Etiqueta_Lote', lambda x: ' + '.join(x.astype(str))),
         Dias_Maximos=('Dias_En_Parcela', 'max'),
         Fechas_Ingreso=('Fecha_Ingreso_Txt', lambda x: ' | '.join(x.astype(str)))
     ).reset_index()
+
+    # --- NUEVA LÓGICA DE COLORES RELATIVOS ---
+    # Paleta: Verde oscuro, Verde claro, Amarillo, Naranja, Rojo
+    paleta = ['#27ae60', '#2ecc71', '#f1c40f', '#e67e22', '#e74c3c']
+
+    if not resumen_parcela.empty:
+        dias_min = resumen_parcela['Dias_Maximos'].min()
+        dias_max = resumen_parcela['Dias_Maximos'].max()
+        
+        if dias_max == dias_min:
+            # Si todos tienen los mismos días, asignar verde claro
+            resumen_parcela['Color_Mapa'] = paleta[1]
+        else:
+            # Dividir el rango entre min y max en 5 niveles exactos
+            resumen_parcela['Nivel_Color'] = pd.cut(
+                resumen_parcela['Dias_Maximos'], 
+                bins=5, 
+                labels=False, 
+                include_lowest=True
+            )
+            resumen_parcela['Color_Mapa'] = resumen_parcela['Nivel_Color'].apply(lambda x: paleta[int(x)])
+    else:
+        resumen_parcela['Color_Mapa'] = None
+    # -----------------------------------------
 
     # 6. Cruzar geometrías
     gdf_resultado = gdf_parcelas.merge(
@@ -120,8 +134,7 @@ try:
         left_on='ID_Parcela',
         right_on='Parcela_Actual',
         how='left'
-    )
-   
+    )   
     # SANITIZACIÓN CRÍTICA PARA FOLIUM:
     for col in gdf_resultado.select_dtypes(include=['datetime64', 'datetime64[ns]', 'datetime64[ns, UTC]']).columns:
         gdf_resultado[col] = gdf_resultado[col].astype(str)
@@ -150,11 +163,16 @@ try:
             forceSeparateButton=True
         ).add_to(m)
         
-        def estilar_parcela(feature):
+def estilar_parcela(feature):
             ocupado = feature['properties'].get('Ocupado', False)
-            dias = feature['properties'].get('Dias_En_Parcela_Mostrar', 0)
+            color_asignado = feature['properties'].get('Color_Mapa')
+            
+            # Manejo de nulos si el potrero está vacío
+            if not color_asignado or pd.isna(color_asignado):
+                color_asignado = '#ffffff'
+                
             return {
-                'fillColor': obtener_color_dias(dias, 30) if ocupado else '#ffffff',
+                'fillColor': color_asignado if ocupado else '#ffffff',
                 'color': '#2c3e50',
                 'weight': 1.5,
                 'fillOpacity': 0.7 if ocupado else 0.4
