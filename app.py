@@ -203,7 +203,7 @@ try:
             folium.Tooltip("ELP").add_to(capa_borde)
             capa_borde.add_to(m)
 
-        st_folium(m, height=750, use_container_width=True)
+    st_folium(m, height=750, use_container_width=True)
 
     # ==========================================
     # 4. TABLA RESUMEN DE PARCELAS OCUPADAS
