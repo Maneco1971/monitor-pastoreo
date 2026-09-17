@@ -62,41 +62,46 @@ try:
 
     df_movimientos['Fecha_Hora'] = pd.to_datetime(df_movimientos['Fecha_Hora'])
     
-    # Obtener el último movimiento POR LOTE para conocer la ubicación actual de cada uno
-    ultimos_mov_lote = (
-        df_movimientos.sort_values('Fecha_Hora')
-        .groupby('ID_Lote')
-        .last()
-        .reset_index()
-    )
+    # 1. Tomar la tabla Lotes como base (para no perder los que no tienen movimientos)
+    lotes_estado = df_lotes.copy()
 
-    # Fusionar con la información de los lotes
-    mov_con_lotes = ultimos_mov_lote.merge(
-        df_lotes, 
-        on='ID_Lote', 
-        how='left'
-    )
+    # 2. Extraer el último movimiento si la tabla no está vacía
+    if not df_movimientos.empty:
+        ultimos_mov = df_movimientos.sort_values('Fecha_Hora').groupby('ID_Lote').last().reset_index()
+        lotes_estado = lotes_estado.merge(ultimos_mov[['ID_Lote', 'ID_Parcela_Destino', 'Fecha_Hora']], on='ID_Lote', how='left')
+    else:
+        lotes_estado['ID_Parcela_Destino'] = None
+        lotes_estado['Fecha_Hora'] = pd.NaT
 
-    # Calcular días de permanencia individuales
+    # 3. Lógica de "Punto Cero": Usar destino si existe, de lo contrario usar parcela inicial
+    if 'ID_Parcela_Inicial' not in lotes_estado.columns:
+        lotes_estado['ID_Parcela_Inicial'] = None # Prevención de error si la columna aún no sincroniza
+        
+    lotes_estado['Parcela_Actual'] = lotes_estado['ID_Parcela_Destino'].fillna(lotes_estado['ID_Parcela_Inicial'])
+
+    # Limpiar lotes sin ubicación asignada
+    lotes_estado = lotes_estado.dropna(subset=['Parcela_Actual'])
+
+    # 4. Calcular días y formatear textos para lotes sin historial
     hoy = datetime.now()
-    mov_con_lotes['Dias_En_Parcela'] = (hoy - mov_con_lotes['Fecha_Hora']).dt.days
-    mov_con_lotes['Fecha_Ingreso_Txt'] = mov_con_lotes['Fecha_Hora'].dt.strftime('%d/%m/%Y %H:%M')
+    lotes_estado['Fecha_Hora'] = pd.to_datetime(lotes_estado['Fecha_Hora'])
+    lotes_estado['Dias_En_Parcela'] = (hoy - lotes_estado['Fecha_Hora']).dt.days.fillna(0)
+    lotes_estado['Fecha_Ingreso_Txt'] = lotes_estado['Fecha_Hora'].dt.strftime('%d/%m/%Y %H:%M').fillna('Origen Inicial')
 
-    # Agrupar por parcela destino para permitir múltiples lotes
-    resumen_parcela = mov_con_lotes.groupby('ID_Parcela_Destino').agg(
+    # 5. Agrupar por la ubicación definitiva (Parcela_Actual) permitiendo múltiples lotes
+    resumen_parcela = lotes_estado.groupby('Parcela_Actual').agg(
         Lotes_Presentes=('ID_Lote', lambda x: ' + '.join(x.astype(str))),
         Dias_Maximos=('Dias_En_Parcela', 'max'),
         Fechas_Ingreso=('Fecha_Ingreso_Txt', lambda x: ' | '.join(x.astype(str)))
     ).reset_index()
 
-    # Cruzar geometrías con la información agregada de pastoreo
+    # 6. Cruzar geometrías con la información agregada
     gdf_resultado = gdf_parcelas.merge(
         resumen_parcela,
         left_on='ID_Parcela',
-        right_on='ID_Parcela_Destino',
+        right_on='Parcela_Actual',
         how='left'
     )
-
     # SANITIZACIÓN CRÍTICA PARA FOLIUM:
     for col in gdf_resultado.select_dtypes(include=['datetime64', 'datetime64[ns]', 'datetime64[ns, UTC]']).columns:
         gdf_resultado[col] = gdf_resultado[col].astype(str)
