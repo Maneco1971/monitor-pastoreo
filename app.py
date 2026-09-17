@@ -59,7 +59,8 @@ try:
     # ==========================================
     # 2. PROCESAMIENTO DE ESTADO ACTUAL
     # ==========================================
-df_movimientos['Fecha_Hora'] = pd.to_datetime(df_movimientos['Fecha_Hora'])
+    
+    df_movimientos['Fecha_Hora'] = pd.to_datetime(df_movimientos['Fecha_Hora'])
     
     # 1. Tomar la tabla Lotes como base
     lotes_estado = df_lotes.copy()
