@@ -189,7 +189,7 @@ try:
             name="Parcelas"
         ).add_to(m)
 
-        if not gdf_borde.empty:
+            if not gdf_borde.empty:
             capa_borde = folium.GeoJson(
                 gdf_borde,
                 style_function=lambda feature: {
