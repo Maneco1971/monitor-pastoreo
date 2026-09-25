@@ -149,7 +149,7 @@ try:
     # 3. CONSTRUCCIÓN DEL MAPA INTERACTIVO
     # ==========================================
 
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([4, 5])
 
     with col1:
         centroide = gdf_todo.geometry.unary_union.centroid
