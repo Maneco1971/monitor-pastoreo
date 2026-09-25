@@ -166,6 +166,15 @@ try:
         def estilar_parcela(feature):
             ocupado = feature['properties'].get('Ocupado', False)
             color_asignado = feature['properties'].get('Color_Mapa')
+            id_parcela = str(feature['properties'].get('ID_Parcela', ''))
+            
+            # Clasificación de borde por módulo
+            if id_parcela.startswith('C'):
+                color_borde = '#e74c3c'  # Rojo (Cría)
+            elif id_parcela.startswith('RI'):
+                color_borde = '#2ecc71'  # Verde (Recría)
+            else:
+                color_borde = '#2c3e50'  # Gris oscuro (Por defecto)
             
             # Manejo de nulos si el potrero está vacío
             if not color_asignado or pd.isna(color_asignado):
@@ -173,8 +182,8 @@ try:
                 
             return {
                 'fillColor': color_asignado if ocupado else '#ffffff',
-                'color': '#2c3e50',
-                'weight': 1.5,
+                'color': color_borde,
+                'weight': 2.0,
                 'fillOpacity': 0.7 if ocupado else 0.4
             }
 
@@ -193,16 +202,15 @@ try:
             capa_borde = folium.GeoJson(
                 gdf_borde,
                 style_function=lambda feature: {
-                    'color': 'black',
-                    'weight': 3,
-                    'fillOpacity': 0,
-                    'dashArray': '5, 5'
+                    'color': '#95a5a6',
+                    'weight': 1.5,
+                    'fillOpacity': 0
                 },
                 name="Área Excluida"
             )
             folium.Tooltip("ELP").add_to(capa_borde)
             capa_borde.add_to(m)
-
+    
         st_folium(m, height=750, use_container_width=True)
 
     # ==========================================
