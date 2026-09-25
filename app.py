@@ -222,6 +222,28 @@ try:
         st_folium(m, height=750, use_container_width=True)
 
     # ==========================================
+    # 2.5. FILTRO DE ESPECIE Y CÁLCULO DE CARGA
+    # ==========================================
+    
+    st.markdown("### Control de Visualización")
+    especie_vista = st.radio(
+        "Seleccione la especie a proyectar en el mapa:", 
+        ["Vacuno", "Ovino"], 
+        horizontal=True
+    )
+
+    # Filtrar el DataFrame temporal solo para el renderizado del mapa y evitar tooltips largos
+    lotes_mapa = lotes_estado[lotes_estado['Especie'] == especie_vista].copy()
+
+    # Reemplazar la variable 'lotes_estado' por 'lotes_mapa' en el paso 5 de la agrupación:
+    resumen_parcela = lotes_mapa.groupby('Parcela_Actual').agg(
+        Lotes_Presentes=('Etiqueta_Lote', lambda x: ' + '.join(x.astype(str))),
+        Dias_Maximos=('Dias_En_Parcela', 'max'),
+        Fechas_Ingreso=('Fecha_Ingreso_Txt', lambda x: ' | '.join(x.astype(str)))
+    ).reset_index()
+    
+    
+    # ==========================================
     # 4. TABLA RESUMEN DE PARCELAS OCUPADAS
     # ==========================================
 
@@ -256,6 +278,24 @@ try:
                 hide_index=True, 
                 use_container_width=True
             )
+            
+            st.markdown("---")
+            st.subheader("📊 Carga Animal Actual")
+            
+            # Cálculos de cabezas por especie
+            cabezas_vacunas = lotes_estado[lotes_estado['Especie'] == 'Vacuno']['Cabezas'].sum()
+            cabezas_ovinas = lotes_estado[lotes_estado['Especie'] == 'Ovino']['Cabezas'].sum()
+            
+            # Cálculo de Unidades Ganaderas (asumiendo que la columna UG_Total existe y es numérica)
+            ug_vacunas = lotes_estado[lotes_estado['Especie'] == 'Vacuno']['UG_Total'].sum()
+            ug_ovinas = lotes_estado[lotes_estado['Especie'] == 'Ovino']['UG_Total'].sum()
+            ug_totales = ug_vacunas + ug_ovinas
+
+            # Despliegue en 3 columnas
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Vacunos", f"{int(cabezas_vacunas)} cab.", f"{ug_vacunas:.1f} UG")
+            m2.metric("Ovinos", f"{int(cabezas_ovinas)} cab.", f"{ug_ovinas:.1f} UG")
+            m3.metric("Carga Total", "-", f"{ug_totales:.1f} UG")
             
             st.metric("Total Parcelas Ocupadas", len(df_ocupadas))
         else:
