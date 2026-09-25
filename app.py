@@ -279,19 +279,20 @@ try:
                 use_container_width=True
             )
             
+          
             st.markdown("---")
             st.subheader("📊 Carga Animal Actual")
             
-            # Cálculos de cabezas por especie
+            # 1. Cálculos de cabezas por especie
             cabezas_vacunas = lotes_estado[lotes_estado['Especie'] == 'Vacuno']['Cabezas'].sum()
             cabezas_ovinas = lotes_estado[lotes_estado['Especie'] == 'Ovino']['Cabezas'].sum()
             
-            # Cálculo de Unidades Ganaderas (asumiendo que la columna UG_Total existe y es numérica)
-            ug_vacunas = lotes_estado[lotes_estado['Especie'] == 'Vacuno']['UG_Total'].sum()
-            ug_ovinas = lotes_estado[lotes_estado['Especie'] == 'Ovino']['UG_Total'].sum()
+            # 2. Cálculo de Unidades Ganaderas aplicando el factor de conversión
+            ug_vacunas = cabezas_vacunas * 1.0
+            ug_ovinas = cabezas_ovinas * 0.15
             ug_totales = ug_vacunas + ug_ovinas
 
-            # Despliegue en 3 columnas
+            # 3. Despliegue en 3 columnas (el :.1f solo formatea el número a 1 decimal)
             m1, m2, m3 = st.columns(3)
             m1.metric("Vacunos", f"{int(cabezas_vacunas)} cab.", f"{ug_vacunas:.1f} UG")
             m2.metric("Ovinos", f"{int(cabezas_ovinas)} cab.", f"{ug_ovinas:.1f} UG")
