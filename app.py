@@ -170,7 +170,7 @@ try:
             
             # Clasificación de borde por módulo
             if id_parcela.startswith('C'):
-                color_borde = '#e74c3c'  # Rojo (Cría)
+                color_borde = '#ff0000'  # Rojo (Cría)
             elif id_parcela.startswith('RI'):
                 color_borde = '#000000'  # Negro (Recría)
             else:
