@@ -183,7 +183,7 @@ try:
             return {
                 'fillColor': color_asignado if ocupado else '#ffffff',
                 'color': color_borde,
-                'weight': 2.0,
+                'weight': 3.0,
                 'fillOpacity': 0.7 if ocupado else 0.4
             }
         # --- REDUCCIÓN GEOMÉTRICA (BUFFER NEGATIVO) ---
