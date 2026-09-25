@@ -231,14 +231,20 @@ try:
         df_ocupadas = gdf_resultado[gdf_resultado['Ocupado'] == True].copy()
 
         if not df_ocupadas.empty:
+            # --- NUEVA LÓGICA: Derivar Módulo desde el ID ---
+            df_ocupadas['Modulo'] = df_ocupadas['ID_Parcela'].apply(
+                lambda x: 'Cría' if str(x).startswith('C') else ('Recría' if str(x).startswith('RI') else 'Otro')
+            )
+            
+            # Reemplazar 'ID_Parcela' por 'Modulo' en la selección y renombre
             tabla_mostrar = df_ocupadas[[
-                'ID_Parcela', 
+                'Modulo', 
                 'Nombre', 
                 'ID_Lote_Mostrar', 
                 'Fechas_Ingreso_Mostrar', 
                 'Dias_En_Parcela_Mostrar'
             ]].rename(columns={
-                'ID_Parcela': 'ID',
+                'Modulo': 'Módulo',
                 'Nombre': 'Potrero',
                 'ID_Lote_Mostrar': 'Lote(s) Actual(es)',
                 'Fechas_Ingreso_Mostrar': 'Fecha(s) Ingreso',
