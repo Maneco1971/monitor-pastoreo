@@ -186,9 +186,17 @@ try:
                 'weight': 2.0,
                 'fillOpacity': 0.7 if ocupado else 0.4
             }
-
+        # --- REDUCCIÓN GEOMÉTRICA (BUFFER NEGATIVO) ---
+        gdf_visual = gdf_resultado.copy()
+        # 1. Proyectar temporalmente a métrico (Web Mercator)
+        gdf_visual = gdf_visual.to_crs(epsg=3857)
+        # 2. Aplicar buffer negativo de -4 metros para encoger por dentro
+        gdf_visual['geometry'] = gdf_visual.geometry.buffer(-4)
+        # 3. Volver a grados (WGS84) para renderizar en Folium
+        gdf_visual = gdf_visual.to_crs(epsg=4326)
+        # ----------------------------------------------
         folium.GeoJson(
-            gdf_resultado,
+            gdf_visual,
             style_function=estilar_parcela,
             tooltip=folium.GeoJsonTooltip(
                 fields=['Nombre', 'ID_Lote_Mostrar', 'Dias_En_Parcela_Mostrar'],
